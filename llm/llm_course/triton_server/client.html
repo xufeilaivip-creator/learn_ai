@@ -1,0 +1,21 @@
+<h1>LLM SSE Client</h1>
+<div id="result"></div>
+
+<script>
+if(typeof(EventSource) !== "undefined") {
+  // var evtSource = new EventSource("https://jackey-06ivq196i0ap.gear-c1.openbayes.net/steam_demo?q=你好");
+  var evtSource = new EventSource("https://nawei-hbn7k6oks4vg.gear-c1.openbayes.net/steam_ask?q=你好，请介绍一下中国。");
+  evtSource.onmessage = function(event) {
+    var msg = JSON.parse(event.data);
+    if(msg.status === "stop") {
+      evtSource.close();
+    }
+    document.getElementById("result").innerHTML += msg.content + "<br>";
+  };
+} else {
+  document.getElementById("result").innerHTML = "Sorry, your browser does not support server-sent events...";
+}
+</script>
+
+</body>
+</html>

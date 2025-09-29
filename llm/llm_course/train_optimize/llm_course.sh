@@ -1,0 +1,18 @@
+deepspeed llm_course.py \
+    --model_name_or_path ./FlagAlpha--Llama2-Chinese-7b-Chat/ \
+    --data_file ./llm_course_dataset.json \
+    --output_dir "./output/" \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 2 \
+    --num_train_epochs 10 \
+    --warmup_steps 512 \
+    --gradient_accumulation_steps 8 \
+    --learning_rate 3e-4 \
+    --evaluation_strategy  steps \
+    --save_strategy steps \
+    --eval_steps 1024 \
+    --save_steps 1024 \
+    --save_total_limit 5 \
+    --bf16 \
+    --gradient_checkpointing \
+    --deepspeed ds_config_zero2.json

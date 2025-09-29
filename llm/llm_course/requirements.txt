@@ -1,0 +1,15 @@
+numpy
+scikit-learn
+sentencepiece
+transformers
+deepspeed
+peft
+trl
+datasets
+gradio
+fastapi
+sse_starlette
+protobuf
+tritonclient[all]
+bfloat16
+pnlp
