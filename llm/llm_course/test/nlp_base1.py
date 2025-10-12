@@ -12,7 +12,7 @@ from gensim.models import Word2Vec
 import re
 
 # 2. 加载数据（示例格式）
-data = pd.read_csv(R'E:\学习\ai\慕课llm算法特训002.LLM大语音模型算法特训 带你转型AI大语音模型算法工程师\源码+PDF课件\源码\llm\llm_course\test\ChnSentiCorp_htl_all.csv')  # 假设包含'review'和'sentiment'列
+data = pd.read_csv(R'D:\UGit\learn_ai\llm\llm_course\test\ChnSentiCorp_htl_all.csv')  # 假设包含'review'和'sentiment'列
 # 正向评价标1，负向标0
 print(data.head(3))
 

@@ -209,16 +209,21 @@ def generate_text_data(seq_len=6, embedding_dim=5):
     vocab_size = len(word_to_idx)  # 词汇表大小（所有句子里不重复的词）
     print(f"\n【词汇表】（共{vocab_size}个不重复词）：{word_to_idx}")
 
-    # 4. 生成词向量（简单版：用“词在词汇表的索引+小随机数”，让同类词向量接近一点）
+    # 4. 生成词向量（修改：更新正负词列表，包含分词后的实际词）
     word_vectors = np.zeros((vocab_size, embedding_dim))
+    # 【关键修改】：加入分词后的组合词（从之前的分词结果里提取）
+    positive_words = ["阳光", "阳光明媚", "晴朗", "天气晴朗", "舒服", "惬意", "暖和", "好看", "好", "干爽", "清新",
+                      "温暖", "适合", "出游", "散步", "爬山", "晒被子", "花开"]
+    negative_words = ["下雨", "大雾", "大风", "暴雨", "寒冷", "冰雹", "阴天", "台风", "沙尘暴", "霜冻", "麻烦",
+                      "看不清", "响不停", "积水", "感冒", "砸坏", "压抑", "无聊", "很差", "冻坏"]
+
     for word, idx in word_to_idx.items():
-        # 给正面相关词（阳光、晴朗、舒服等）加微小正向值，负面相关词（下雨、大雾、麻烦等）加微小负向值
-        if word in ["阳光", "晴朗", "舒服", "惬意", "暖和", "好看", "好", "干爽", "清新", "温暖"]:
-            word_vectors[idx] = np.ones(embedding_dim) * 0.5 + np.random.randn(embedding_dim) * 0.01
-        elif word in ["下雨", "大雾", "大风", "暴雨", "寒冷", "冰雹", "阴天", "台风", "沙尘暴", "霜冻", "麻烦"]:
-            word_vectors[idx] = np.ones(embedding_dim) * -0.5 + np.random.randn(embedding_dim) * 0.01
+        if word in positive_words:
+            word_vectors[idx] = np.ones(embedding_dim) * 0.6 + np.random.randn(embedding_dim) * 0.05  # 增大正向偏向（0.6→更明显）
+        elif word in negative_words:
+            word_vectors[idx] = np.ones(embedding_dim) * -0.6 + np.random.randn(embedding_dim) * 0.05  # 增大负向偏向
         else:
-            word_vectors[idx] = np.random.randn(embedding_dim) * 0.01
+            word_vectors[idx] = np.random.randn(embedding_dim) * 0.05  # 中性词随机波动稍大，不影响
 
     # 5. 把句子转成RNN需要的输入格式：(seq_len, num_samples, embedding_dim)
     X = np.zeros((seq_len, num_samples, embedding_dim))  # 初始化全0
