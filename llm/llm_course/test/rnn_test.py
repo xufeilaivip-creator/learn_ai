@@ -199,9 +199,9 @@ class ManualRNN:
         # 6. 反向遍历时间步（从最后一个词往第一个词推，计算隐藏层参数梯度）
         for t in reversed(range(seq_len)):
             # a. 当前时间步的隐藏状态（从缓存中取）
-            h =
+            h =hidden_states[t]
             # b. 计算当前隐藏状态的梯度（链式法则：传递误差 × 激活函数导数）
-            dh =
+            dh =dh_next@tanh_derivative(h)
             # c. 前一个时间步的隐藏状态（t=0时无历史，用全0）
             if t > 0:
                 h_prev =
