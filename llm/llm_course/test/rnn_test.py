@@ -136,7 +136,7 @@ class ManualRNN:
         self.cache['y_hat'] =y_hat
 
         # 8. 返回预测概率（给计算损失和测试用）
-        return
+        return y_hat
 
     def backward(self, y_true):
         """
@@ -187,14 +187,14 @@ class ManualRNN:
 
         # 4. 计算输出层梯度（先算输出层，再反向算隐藏层）
         # a. 输出层线性得分的误差（预测与真实的差距）
-        dy =y_true-y_hat
+        dy =y_hat-y_true
         # b. 隐藏→输出权重的梯度（利用最终隐藏状态和输出误差）
-        dWhy =h_final.t@dy
+        dWhy =h_final.T@dy
         # c. 输出层偏置的梯度（所有样本误差求和，保持形状）
         dby =dy
 
         # 5. 初始化隐藏层反向误差（输出层误差传递到隐藏层）
-        dh_next =dy@dWhy.t
+        dh_next =dy@dWhy.T
 
         # 6. 反向遍历时间步（从最后一个词往第一个词推，计算隐藏层参数梯度）
         for t in reversed(range(seq_len)):
@@ -204,25 +204,25 @@ class ManualRNN:
             dh =dh_next@tanh_derivative(h)
             # c. 前一个时间步的隐藏状态（t=0时无历史，用全0）
             if t > 0:
-                h_prev =
+                h_prev =hidden_states[t-1]
             else:
-                h_prev =
+                h_prev = np.zeros((batch_size, self.Whh.shape[0]))
                 # d. 累加隐藏→隐藏权重的梯度（每个时间步都用该权重，需累加）
-            dWhh +=
+            dWhh +=h_prev.T@dh
             # e. 累加输入→隐藏权重的梯度（每个时间步都用该权重，需累加）
-            x_t =
-            dWxh +=
+            x_t =x[t]
+            dWxh +=x_t@dh
             # f. 累加隐藏层偏置的梯度（按原因1-3处理）
-            dbh +=
+            dbh +=dh
             # g. 更新隐藏层反向误差（传递到前一个时间步，供计算前一步梯度用）
-            dh_next =
+            dh_next =dh@self.Whh
 
             # 7. 梯度平均（除以批量大小，避免批量数影响梯度尺度）
-        dWxh /=
-        dWhh /=
-        dWhy /=
-        dbh /=
-        dby /=
+        dWxh /=batch_size
+        dWhh /=batch_size
+        dWhy /=batch_size
+        dbh /=batch_size
+        dby /=batch_size
 
         # 8. 保存所有梯度（给参数更新用）
         self.grads = {
@@ -243,15 +243,15 @@ class ManualRNN:
         提示：每个参数（权重、偏置）都按上述核心公式更新
         """
         # 输入→隐藏权重更新
-        self.Wxh -=
+        self.Wxh -=self.grads["dWxh"]*learning_rate
         # 隐藏→隐藏权重更新（RNN核心记忆参数）
-        self.Whh -=
+        self.Whh -=self.grads["dWhh"]*learning_rate
         # 隐藏→输出权重更新
-        self.Why -=
+        self.Why -=self.grads["dWhy"]*learning_rate
         # 隐藏层偏置更新
-        self.bh -=
+        self.bh -=self.grads["dbh"]*learning_rate
         # 输出层偏置更新
-        self.by -=
+        self.by -=self.grads["dby"]*learning_rate
 
     # ------------- 4. 辅助函数：计算交叉熵损失（备注：损失函数是“衡量模型预测误差”的工具，误差大则损失大）-------------
 
@@ -271,10 +271,10 @@ def compute_loss(y_hat, y_true):
     提示：用numpy的对数函数和求和函数实现公式
     """
     # 步骤1：获取批量大小（用于后续平均）
-    batch_size =
+    batch_size =y_hat.shape[0]
     # 步骤2：计算交叉熵损失（加微小值防log(0)，求和后平均到每个样本）
-    loss =
-    return
+    loss =-np.sum(y_true*np.log(y_hat))/batch_size
+    return loss
 
 
 # ------------- 5. 核心辅助函数：生成文本样本（备注：将“文字句子”转换成“模型能处理的数值格式”，NLP基础步骤）-------------
@@ -313,21 +313,41 @@ def generate_text_data(seq_len=6, embedding_dim=5):
     # 1. 定义原始正负样本句子（各10个，语义清晰，方便模型学习）
     positive_texts = [
         # 补全10个正面天气句子
+        "今天阳光明媚很舒服",
+        "周末天气晴朗适合出游",
+        "下午微风拂面很惬意",
+        "早晨天气暖和不用穿外套",
+        "傍晚夕阳好看适合散步",
+        "明天天气好可以去爬山",
+        "最近天气干爽很舒服",
+        "中午阳光好适合晒被子",
+        "雨后天气清新空气好",
+        "春天天气温暖花开了"
     ]
     negative_texts = [
         # 补全10个负面天气句子
+        "今天下雨出门很麻烦",
+        "早上大雾开车看不清路",
+        "晚上刮大风窗户响不停",
+        "昨天暴雨路上积水很多",
+        "冬天天气寒冷容易感冒",
+        "下午下冰雹砸坏了花盆",
+        "阴天没有太阳很压抑",
+        "台风天不能出门很无聊",
+        "沙尘暴天气空气很差",
+        "霜冻天气蔬菜都冻坏了"
     ]
 
     # 2. 合并所有句子和标签（正面标1，负面标0）
-    texts =
-    labels =
-    num_samples =
+    texts =positive_texts + negative_texts
+    labels =[1] * len(positive_texts) + [0] * len(negative_texts)
+    num_samples =len(texts)
 
     # 3. 中文分词（拆成词列表），并打印结果（调试用）
     tokenized_texts = []
     for text in texts:
         # 用jieba分词，得到词列表
-        words =
+        words =jieba.lcut(text)
         tokenized_texts.append(words)
     print("\n【所有文本样本及分词结果】")
     for i, (text, words) in enumerate(zip(texts, tokenized_texts)):
@@ -339,14 +359,14 @@ def generate_text_data(seq_len=6, embedding_dim=5):
     for words in tokenized_texts:
         for word in words:
             if word not in word_to_idx:  # 仅给未出现的词分配索引（避免重复）
-                word_to_idx[word] =
+                word_to_idx[word] =idx
                 idx += 1
-    vocab_size =  # 词汇表大小（不重复词的数量）
+    vocab_size = len(word_to_idx)  # 词汇表大小（不重复词的数量）
     print(f"\n【词汇表】（共{vocab_size}个不重复词）：{word_to_idx}")
 
     # 5. 生成词向量（让同类词向量接近，传递语义信号——模型区分正负的关键）
     # 初始化词向量矩阵（形状：词汇表大小 × 词向量维度）
-    word_vectors =
+    word_vectors =np.zeros((vocab_size,embedding_dim))
     # 定义正负词列表（包含分词后的词，避免语义信号丢失）
     positive_words = ["阳光", "阳光明媚", "晴朗", "天气晴朗", "舒服", "惬意", "暖和", "好看", "好", "干爽", "清新",
                       "温暖", "适合", "出游", "散步", "爬山", "晒被子", "花开"]
@@ -356,36 +376,36 @@ def generate_text_data(seq_len=6, embedding_dim=5):
     for word, idx in word_to_idx.items():
         if word in positive_words:
             # 正面词：正向基础值 + 小随机数（避免向量重复）
-            word_vectors[idx] =
+            word_vectors[idx] =np.ones(embedding_dim)*0.6+np.random.rand(embedding_dim)*0.05
         elif word in negative_words:
             # 负面词：负向基础值 + 小随机数
-            word_vectors[idx] =
+            word_vectors[idx] =word_vectors[idx] =-np.ones(embedding_dim)*0.6+np.random.rand(embedding_dim)*0.05
         else:
             # 中性词：接近0的小随机数（不传递正负语义）
-            word_vectors[idx] =
+            word_vectors[idx] =np.random.rand(embedding_dim)*0.05
 
             # 6. 转换输入格式为RNN要求的形状
     # 初始化全0数组（短句补0的位置直接为0）
-    X =
+    X =np.zeros((seq_len,num_samples,embedding_dim))
     # 逐样本、逐时间步填充词向量
     for sample_idx in range(num_samples):
         # 当前样本的分词结果（词列表）
-        words =
+        words =tokenized_texts[sample_idx]
         # 遍历每个时间步（不超过最大时间步，避免越界）
         for time_step in range(min(len(words), seq_len)):
             # 当前时间步的词
-            word =
+            word =words[time_step]
             # 查词的索引（从词汇表中获取）
-            word_idx =
+            word_idx =word_to_idx[word]
             # 填充词向量到对应位置
-            X[time_step, sample_idx, :] =
+            X[time_step, sample_idx, :] = word_vectors[word_idx]
 
             # 7. 标签转one-hot编码（匹配模型输出格式）
     # 初始化全0数组（形状：样本数 × 类别数）
-    y =
+    y =np.zeros((num_samples,2))
     # 给每个样本的正确类别位置设为1
     for i, label in enumerate(labels):
-        y[i, label] =
+        y[i, label] =1
 
         # 8. 返回所有需要的变量（给训练和测试用）
     return X, y, texts, labels
@@ -420,24 +440,24 @@ def train_rnn():
        f. 计算测试准确率（正确预测数/总测试数），打印准确率
     """
     # 1. 设置超参数（控制训练过程，根据任务调整）
-    seq_len =
-    embedding_dim =
-    hidden_size =
-    output_size =
-    learning_rate =
-    epochs =
-    batch_size =
+    seq_len =6
+    embedding_dim =5
+    hidden_size =12
+    output_size =2
+    learning_rate =0.1
+    epochs =100
+    batch_size =8
 
     # 2. 生成文本样本（把文字转成模型能处理的数值格式）
-    X, y, texts, true_labels =
-    num_samples =  # 总样本数
+    X, y, texts, true_labels =generate_text_data(seq_len,embedding_dim)
+    num_samples =len(texts)  # 总样本数
     # 打印输入和标签格式（确认是否符合RNN要求）
     print(
         f"\n【模型输入格式】X.shape: {X.shape} → (时间步长={seq_len}, 样本数={num_samples}, 词向量维度={embedding_dim})")
     print(f"【标签格式】y.shape: {y.shape} → (样本数={num_samples}, 类别数={output_size})")
 
     # 3. 创建RNN模型（初始化权重和偏置，搭建模型骨架）
-    rnn =
+    rnn =ManualRNN(embedding_dim,hidden_size,output_size)
 
     # 4. 开始训练循环（多轮遍历样本，让模型逐步学会区分正负天气）
     print("\n" + "=" * 50)
@@ -448,23 +468,23 @@ def train_rnn():
         # 批量遍历样本（一次训指定数量，提高效率）
         for i in range(0, num_samples, batch_size):
             # 取当前批量的样本（避免最后一批越界）
-            end_idx =
-            batch_X =  # 当前批量的输入
-            batch_y =  # 当前批量的标签
+            end_idx = min(i + batch_size, num_samples)
+            batch_X =X[:,i:end_idx ,:]  # 当前批量的输入
+            batch_y =y[i:end_idx, :]   # 当前批量的标签
 
             # 前向传播：模型预测当前批量的类别概率
-            y_hat =
+            y_hat =rnn.forward(batch_X)
             # 计算当前批量的损失（衡量预测误差）
-            loss =
+            loss =compute_loss(y_hat,batch_y)
             # 累加总损失（乘以当前批量样本数，确保总损失是所有样本的和）
-            total_loss +=
+            total_loss +=loss
             # 反向传播：计算梯度，告诉模型参数调整方向
             rnn.backward(batch_y)
             # 更新参数：用梯度调整权重和偏置，模型“纠错”
             rnn.update_parameters(learning_rate)
 
         # 计算当前轮的平均损失（总损失 / 总样本数）
-        avg_loss =
+        avg_loss =total_loss/num_samples
         # 每10轮打印一次损失（观察训练进度）
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1:3d}/{epochs} | 平均损失: {avg_loss:.4f}（损失越小越准）")
@@ -472,28 +492,28 @@ def train_rnn():
     # 5. 测试模型（用前5个样本验证效果）
     print("\n" + "=" * 50)
     print("【模型测试】取前5个样本看预测结果")
-    test_idx =  # 测试前5个样本
-    test_X =  # 前5个样本的输入
+    test_idx =5 # 测试前5个样本
+    test_X = X[:,0:4,:] # 前5个样本的输入
 
     # 模型预测测试样本的概率
-    y_hat =
+    y_hat =rnn.forward(test_X)
     # 转换预测概率为标签（取概率最大的类别）
-    pred_labels =
+    pred_labels =np.argmax(y_hat,axis=1)
     # 计算预测置信度（每个样本预测为对应类别的概率）
-    pred_probs =
+    pred_probs =[y_hat[i,pred_labels[i]] for i in range(test_idx)]
 
     # 打印测试结果表格（清晰对比真实值和预测值）
     print(f"{'样本':<4} {'原始句子':<15} {'真实标签':<8} {'预测标签':<8} {'置信度':<6}")
     print("-" * 50)
     for i in range(test_idx):
         # 转换标签为文字（0→负面，1→正面，方便查看）
-        true_label =
-        pred_label =
+        true_label ="正面" if true_labels[i]==1 else "负面"
+        pred_label ="正面" if pred_labels[i]==1 else "负面"
         # 打印每一行结果
         print(f"{i + 1:<4} {texts[i]:<15} {true_label:<8} {pred_label:<8} {pred_probs[i]:.4f}")
 
     # 计算测试准确率（正确预测的样本数 / 总测试样本数）
-    accuracy =
+    accuracy =np.mean(pred_labels==true_labels[:test_idx])
     # 打印准确率（1.0表示全对，0.0表示全错）
     print(f"\n测试准确率: {accuracy:.2f}（1.0表示全对，0.0表示全错）")
 
