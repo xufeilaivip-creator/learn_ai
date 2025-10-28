@@ -1,6 +1,7 @@
 import numpy as np
 import jieba  # 用于中文分词（先pip install jieba）
-
+import torch
+import torch.nn as nn
 
 
 # -------------------------- 重点：文字样本生成函数（替换原来的随机数字样本） --------------------------
@@ -96,6 +97,21 @@ def generate_text_data(seq_len=6, embedding_dim=5):
 
     return X, y, texts, labels
 
+
+class SimpleRNN(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super().__init__()
+
+        self.stack = nn.Sequential(
+            nn.Linear(2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1),
+        )
+
+    def forward(self, x):
+        logits = self.stack(x)
+        return logits
+
 # 训练函数（只改样本生成部分，其他不变）
 def train_rnn():
     # 超参数（根据文字样本调整，更易训练）
@@ -114,7 +130,7 @@ def train_rnn():
     print(f"【标签格式】y.shape: {y.shape} → (样本数={num_samples}, 类别数={output_size})")
 
     # 创建RNN模型
-    rnn = ManualRNN(input_size=embedding_dim, hidden_size=hidden_size, output_size=output_size)
+    rnn = SimpleRNN(input_size=embedding_dim, hidden_size=hidden_size, output_size=output_size)
 
     # 训练循环
     print("\n" + "="*50)
