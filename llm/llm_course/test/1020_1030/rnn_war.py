@@ -1,6 +1,7 @@
 import numpy as np
 import jieba  # 用于中文分词（先pip install jieba）
 import torch
+import torch.optim as optim
 import torch.nn as nn
 
 
@@ -99,18 +100,31 @@ def generate_text_data(seq_len=6, embedding_dim=5):
 
 
 class SimpleRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super().__init__()
-
-        self.stack = nn.Sequential(
-            nn.Linear(2, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
+    def __init__(self, input_size, hidden_size, output_size, num_layers=1):
+        super(SimpleRNN, self).__init__()
+        self.rnn = nn.RNN(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=False
         )
+        # 最后加一个线性层：把隐藏状态映射到类别
+        self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        logits = self.stack(x)
+        # x shape: (seq_len, batch_size, input_size)
+        # 前向传播，得到所有时间步的输出和最后一个隐藏状态
+        output, hn = self.rnn(x)  # hn shape: (num_layers, batch_size, hidden_size)
+
+        # 取最后一层的最后一个时间步的隐藏状态（用于分类）
+        last_hidden = hn[-1, :, :]  # shape: (batch_size, hidden_size)
+
+        # 映射到类别
+        logits = self.fc(last_hidden)  # shape: (batch_size, num_classes)
         return logits
+
+
+
 
 # 训练函数（只改样本生成部分，其他不变）
 def train_rnn():
@@ -129,8 +143,14 @@ def train_rnn():
     print(f"\n【模型输入格式】X.shape: {X.shape} → (时间步长={seq_len}, 样本数={num_samples}, 词向量维度={embedding_dim})")
     print(f"【标签格式】y.shape: {y.shape} → (样本数={num_samples}, 类别数={output_size})")
 
+
     # 创建RNN模型
-    rnn = SimpleRNN(input_size=embedding_dim, hidden_size=hidden_size, output_size=output_size)
+    rnnModel = SimpleRNN(input_size=embedding_dim, hidden_size=hidden_size, output_size=output_size)
+    # 损失函数：交叉熵损失（适合分类任务）
+    criterion = nn.CrossEntropyLoss()
+    # 优化器：Adam（负责参数更新，需要传入模型参数和学习率）
+    optimizer = optim.Adam(rnnModel.parameters(), lr=0.001)
+
 
     # 训练循环
     print("\n" + "="*50)
@@ -144,17 +164,20 @@ def train_rnn():
             end_idx = min(i + batch_size, num_samples)
             batch_X = X[:, i:end_idx, :]  # 批量输入
             batch_y = y[i:end_idx, :]     # 批量标签
+            batch_X_tensor = torch.from_numpy(batch_X).float()
+            batch_y_tensor = torch.from_numpy(batch_y).float()
 
             # 前向传播：预测类别概率
-            y_hat = rnn.forward(batch_X)
+            y_hat = rnnModel.forward(batch_X_tensor)
             # 计算损失（损失越小，预测越准）
-            loss = compute_loss(y_hat, batch_y)
+            loss = criterion(y_hat, batch_y_tensor)
             total_loss += loss * (end_idx - i)  # 累计损失（乘以批量大小，最后平均）
 
+            optimizer.zero_grad()
             # 反向传播：计算梯度
-            rnn.backward(batch_y)
-            # 更新参数：用梯度调整权重，让下次预测更准
-            rnn.update_parameters(learning_rate)
+            loss.backward()
+            # 优化器根据反向传播得到的梯度，更新所有参数（新参数 = 旧参数 - 学习率×梯度）
+            optimizer.step()
 
         # 每10轮打印一次平均损失（观察训练进度）
         avg_loss = total_loss / num_samples
@@ -167,7 +190,9 @@ def train_rnn():
     test_idx = 5  # 测试前5个样本
     test_X = X[:, :test_idx, :]  # 测试输入
     test_y = y[:test_idx, :]     # 测试标签
-    y_hat = rnn.forward(test_X)  # 模型预测
+    test_X_tensor = torch.from_numpy(test_X).float()
+    test_y_tensor = torch.from_numpy(test_y).float()
+    y_hat = rnnModel.forward(test_X_tensor)  # 模型预测
 
     # 转换结果：概率→标签（取概率最大的类别）
     pred_labels = np.argmax(y_hat, axis=1)  # 预测标签（0=负面，1=正面）
