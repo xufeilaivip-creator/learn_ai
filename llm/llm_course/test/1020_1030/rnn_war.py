@@ -121,7 +121,8 @@ class SimpleRNN(nn.Module):
 
         # 映射到类别
         logits = self.fc(last_hidden)  # shape: (batch_size, num_classes)
-        return logits
+        Out_logits = torch.softmax(logits, dim=1)
+        return Out_logits
 
 
 
@@ -189,25 +190,24 @@ def train_rnn():
     print("【模型测试】取前5个样本看预测结果")
     test_idx = 5  # 测试前5个样本
     test_X = X[:, :test_idx, :]  # 测试输入
-    test_y = y[:test_idx, :]     # 测试标签
     test_X_tensor = torch.from_numpy(test_X).float()
-    test_y_tensor = torch.from_numpy(test_y).float()
     y_hat = rnnModel.forward(test_X_tensor)  # 模型预测
 
     # 转换结果：概率→标签（取概率最大的类别）
-    pred_labels = np.argmax(y_hat, axis=1)  # 预测标签（0=负面，1=正面）
-    pred_probs = [y_hat[i, pred_labels[i]] for i in range(test_idx)]  # 预测置信度（0-1，越近1越确定）
+    pred_labels = torch.argmax(y_hat, axis=1)  # 预测标签（0=负面，1=正面）
+    pred_labels_np = pred_labels.numpy()  # 关键步骤：统一类型
+    pred_probs = [y_hat[i, pred_labels_np[i]] for i in range(test_idx)]  # 预测置信度（0-1，越近1越确定）
 
     # 打印详细结果（对应原始句子，直观看到预测对不对）
     print(f"{'样本':<4} {'原始句子':<15} {'真实标签':<8} {'预测标签':<8} {'置信度':<6}")
     print("-"*50)
     for i in range(test_idx):
         true_label = "正面" if true_labels[i] == 1 else "负面"
-        pred_label = "正面" if pred_labels[i] == 1 else "负面"
+        pred_label = "正面" if pred_labels_np[i] == 1 else "负面"
         print(f"{i+1:<4} {texts[i]:<15} {true_label:<8} {pred_label:<8} {pred_probs[i]:.4f}")
 
     # 计算测试准确率
-    accuracy = np.mean(pred_labels == true_labels[:test_idx])
+    accuracy = np.mean(pred_labels_np == true_labels[:test_idx])
     print(f"\n测试准确率: {accuracy:.2f}（1.0表示全对，0.0表示全错）")
 
 # 运行训练
